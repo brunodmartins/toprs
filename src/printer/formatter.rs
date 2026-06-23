@@ -15,3 +15,7 @@ pub fn format_mem_display(mem_usage_kb: u64, total_memory_kb: u64) -> String {
         usage_percentage
     );
 }
+
+pub fn format_cpu_display(cpu_usage_pct: f64) -> String {
+    return format!("{:.2}%", cpu_usage_pct);
+}

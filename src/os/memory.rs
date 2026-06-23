@@ -15,10 +15,3 @@ pub fn get_proc_memory_usage(proc_path: &Path) -> Option<u64> {
     let memory_res_kb = res_pages * 4;
     Some(memory_res_kb)
 }
-
-pub fn get_system_memory_kbs() -> Option<u64> {
-    let content = fs::read_to_string("/proc/meminfo").ok()?;
-    let first_line = content.lines().next()?;
-    let total_kb_str: String = first_line.chars().filter(|c| c.is_ascii_digit()).collect();
-    total_kb_str.parse::<u64>().ok()
-}

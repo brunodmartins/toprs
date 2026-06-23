@@ -1,7 +1,7 @@
 mod os;
 mod printer;
 
-use crate::os::memory::get_system_memory_kbs;
+use crate::os::info::get_system_memory_kbs;
 use crate::os::process::ProcessInfo;
 use crate::os::process::read_processes;
 use crate::printer::table::pretty_print_table;
