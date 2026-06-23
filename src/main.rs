@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use comfy_table::presets::UTF8_FULL;
-use comfy_table::{Cell, Color, Table};
+use comfy_table::Table;
 
 #[derive(Debug)]
 struct ProcessInfo {
@@ -12,6 +12,13 @@ struct ProcessInfo {
 }
 
 fn main() {
+    let processes_map = read_processes();
+    let mut processes : Vec<ProcessInfo> = processes_map.into_values().collect();
+    processes.sort_by_key(|p| std::cmp::Reverse(p.memory_res_kb));
+    pretty_print_table(processes);
+}
+
+fn read_processes() -> HashMap<String, ProcessInfo> {
     let mut processes_map: HashMap<String, ProcessInfo> = HashMap::new();
     // 1. Listar o diretório /proc
     if let Ok(entries) = fs::read_dir("/proc") {
@@ -33,20 +40,19 @@ fn main() {
             }
         }
     }
-    let mut processes : Vec<ProcessInfo> = processes_map.into_values().collect();
-    processes.sort_by_key(|p| std::cmp::Reverse(p.memory_res_kb));
-    pretty_print_table(processes);
+    processes_map
 }
 
 fn pretty_print_table(processes: Vec<ProcessInfo>) {
     let mut table = Table::new();
     table.load_preset(UTF8_FULL);
     table.set_header(vec!["PID", "NAME", "Memory Usage"]);
+    let total_memory = get_system_memory_kbs();
     for process in processes {
         table.add_row(vec![
             process.pid.to_string(),
             process.name,
-            format_mem_display(process.memory_res_kb)
+            format_mem_display(process.memory_res_kb, total_memory.unwrap()),
         ]);
     }
     println!("{table}");
@@ -83,16 +89,27 @@ fn get_proc_memory_usage(proc_path: &Path) -> Option<u64> {
     Some(memory_res_kb)
 }
 
-fn format_mem_display(mem_usage_kb: u64) -> String {
+fn format_mem_display(mem_usage_kb: u64, total_memory_kb: u64) -> String {
     if mem_usage_kb == 0 {
         return "0 KB".to_string();
     }
+    let usage_percentage = (mem_usage_kb as f32 * 100.00) / total_memory_kb as f32;
     if mem_usage_kb < 1024 {
-        return format!("{} KB", mem_usage_kb);
+        return format!("{} KB ({:.2}%)", mem_usage_kb, usage_percentage);
     }
     if mem_usage_kb < 1024 * 1024 {
-        return format!("{} MB", mem_usage_kb / 1024);
+        return format!("{} MB ({:.2}%)", mem_usage_kb / 1024, usage_percentage);
     }
-    return format!("{} GB", mem_usage_kb / 1024 / 1024);
+    return format!("{} GB ({:.2}%)", mem_usage_kb / 1024 / 1024, usage_percentage);
 
+}
+
+fn get_system_memory_kbs() -> Option<u64> {
+    let content = fs::read_to_string("/proc/meminfo").ok()?;
+    let first_line = content.lines().next()?;
+    let total_kb_str: String = first_line
+        .chars()
+        .filter(|c| c.is_ascii_digit())
+        .collect();
+    total_kb_str.parse::<u64>().ok()
 }
