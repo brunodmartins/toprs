@@ -3,6 +3,14 @@ use std::fs;
 use std::path::Path;
 use comfy_table::presets::UTF8_FULL;
 use comfy_table::Table;
+use clap::Parser;
+
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    #[arg(short, long)]
+    limit: Option<usize>,
+}
 
 #[derive(Debug)]
 struct ProcessInfo {
@@ -12,9 +20,14 @@ struct ProcessInfo {
 }
 
 fn main() {
+    let args = Args::parse();
     let processes_map = read_processes();
     let mut processes : Vec<ProcessInfo> = processes_map.into_values().collect();
     processes.sort_by_key(|p| std::cmp::Reverse(p.memory_res_kb));
+
+    if args.limit != None {
+        _ = processes.split_off(args.limit.unwrap());
+    }
     pretty_print_table(processes);
 }
 
