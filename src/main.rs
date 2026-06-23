@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use comfy_table::presets::UTF8_FULL;
@@ -11,7 +12,7 @@ struct ProcessInfo {
 }
 
 fn main() {
-    let mut processes: Vec<ProcessInfo> = vec![];
+    let mut processes_map: HashMap<String, ProcessInfo> = HashMap::new();
     // 1. Listar o diretório /proc
     if let Ok(entries) = fs::read_dir("/proc") {
         for entry in entries.flatten() {
@@ -20,13 +21,20 @@ fn main() {
                 if let Some(pid_str) = path.file_name().and_then(|s| s.to_str()) {
                     if let Ok(pid) = pid_str.parse::<u32>() {
                         if let Some(info) = parse_process_data(pid, &path) {
-                            processes.push(info);
+                            if processes_map.contains_key(&info.name) {
+                                let p = processes_map.get_mut(&info.name).unwrap();
+                                p.memory_res_kb += info.memory_res_kb;
+                            } else {
+                                processes_map.insert(info.name.to_string(), info);
+                            }
                         }
                     }
                 }
             }
         }
     }
+    let mut processes : Vec<ProcessInfo> = processes_map.into_values().collect();
+    processes.sort_by_key(|p| std::cmp::Reverse(p.memory_res_kb));
     pretty_print_table(processes);
 }
 
@@ -76,11 +84,15 @@ fn get_proc_memory_usage(proc_path: &Path) -> Option<u64> {
 }
 
 fn format_mem_display(mem_usage_kb: u64) -> String {
-    if mem_usage_kb > 1024 ^ 2 {
+    if mem_usage_kb == 0 {
+        return "0 KB".to_string();
+    }
+    if mem_usage_kb < 1024 {
+        return format!("{} KB", mem_usage_kb);
+    }
+    if mem_usage_kb < 1024 * 1024 {
         return format!("{} MB", mem_usage_kb / 1024);
     }
-    if mem_usage_kb > 1024 ^ 3 {
-        return format!("{} GB", mem_usage_kb / (1024 ^ 2));
-    }
-    return format!("{} KB", mem_usage_kb)
+    return format!("{} GB", mem_usage_kb / 1024 / 1024);
+
 }
