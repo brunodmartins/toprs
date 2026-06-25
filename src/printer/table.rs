@@ -12,7 +12,7 @@ pub fn pretty_print_table(processes: Vec<ProcessInfo>, total_memory: u64) {
             process.pid.to_string(),
             process.name,
             format_mem_display(process.memory_res_kb, total_memory),
-            format_cpu_display(process.cpu_usage_pct),
+            format_cpu_display(process.cpu_usage_avg_since_start_pct),
         ]);
     }
     println!("{table}");

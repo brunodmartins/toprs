@@ -1,17 +1,19 @@
 use std::collections::HashMap;
 use std::fs;
+use std::fs::ReadDir;
 use std::path::Path;
 
-use crate::os::cpu::get_cpu_usage;
+use crate::os::cpu::{get_cpu_ticks, get_cpu_usage_since_start, CpuTicks};
 use crate::os::info::get_system_uptime;
 use crate::os::memory::get_proc_memory_usage;
 
-#[derive(Debug)]
 pub struct ProcessInfo {
     pub pid: u32,
     pub name: String,
     pub memory_res_kb: u64,
-    pub cpu_usage_pct: f64,
+    pub cpu_usage_avg_since_start_pct: f64,
+    pub cpu_ticks: CpuTicks,
+    pub cpu_usage_avg_last_second_pct: f64
 }
 
 pub fn read_processes() -> HashMap<String, ProcessInfo> {
@@ -19,18 +21,26 @@ pub fn read_processes() -> HashMap<String, ProcessInfo> {
     let system_uptime = get_system_uptime().unwrap();
     // 1. Listar o diretório /proc
     if let Ok(entries) = fs::read_dir("/proc") {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                if let Some(pid_str) = path.file_name().and_then(|s| s.to_str()) {
-                    if let Ok(pid) = pid_str.parse::<u32>() {
-                        if let Some(info) = parse_process_data(pid, &path, system_uptime) {
-                            if processes_map.contains_key(&info.name) {
-                                let p = processes_map.get_mut(&info.name).unwrap();
-                                p.memory_res_kb += info.memory_res_kb;
-                            } else {
-                                processes_map.insert(info.name.to_string(), info);
-                            }
+        processes_map = read_each_process(system_uptime, entries);
+    }
+    processes_map
+}
+
+fn read_each_process(system_uptime: f64, entries: ReadDir) -> HashMap<String, ProcessInfo> {
+    let mut processes_map: HashMap<String, ProcessInfo> = HashMap::new();
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            if let Some(pid_str) = path.file_name().and_then(|s| s.to_str()) {
+                if let Ok(pid) = pid_str.parse::<u32>() {
+                    if let Some(info) = parse_process_data(pid, &path, system_uptime) {
+                        if processes_map.contains_key(&info.name) {
+                            let p = processes_map.get_mut(&info.name).unwrap();
+                            p.memory_res_kb += info.memory_res_kb;
+                            p.cpu_usage_avg_since_start_pct += info.cpu_usage_avg_since_start_pct;
+                        } else {
+                            processes_map.insert(info.name.to_string(), info);
                         }
                     }
                 }
@@ -38,7 +48,7 @@ pub fn read_processes() -> HashMap<String, ProcessInfo> {
         }
     }
     processes_map.remove("toprs"); //ignore self process
-    processes_map
+    return processes_map
 }
 
 fn get_proc_name(proc_path: &Path) -> Option<String> {
@@ -50,11 +60,14 @@ fn parse_process_data(pid: u32, proc_path: &Path, system_uptime: f64) -> Option<
     // Ler /proc/[PID]/comm para pegar o nome
     let name = get_proc_name(proc_path)?;
     let memory_res_kb = get_proc_memory_usage(proc_path)?;
-    let cpu_usage_pct = get_cpu_usage(proc_path, system_uptime)?;
+    let cpu_ticks = get_cpu_ticks(proc_path)?;
+    let cpu_usage_pct = get_cpu_usage_since_start(proc_path, system_uptime)?;
     Some(ProcessInfo {
         pid,
         name,
         memory_res_kb,
-        cpu_usage_pct,
+        cpu_usage_avg_since_start_pct: cpu_usage_pct,
+        cpu_ticks,
+        cpu_usage_avg_last_second_pct: 0.0,
     })
 }
