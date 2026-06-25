@@ -1,12 +1,13 @@
 use std::collections::HashMap;
-use std::fs;
-use std::fs::ReadDir;
+use std::fs::DirEntry;
 use std::path::Path;
+use std::{fs, time};
 
-use crate::os::cpu::{get_cpu_ticks, get_cpu_usage_since_start, CpuTicks};
+use crate::os::cpu::{get_cpu_ticks, get_cpu_usage_last_second, get_cpu_usage_since_start, CpuTicks};
 use crate::os::info::get_system_uptime;
 use crate::os::memory::get_proc_memory_usage;
 
+#[derive(Clone)]
 pub struct ProcessInfo {
     pub pid: u32,
     pub name: String,
@@ -19,17 +20,33 @@ pub struct ProcessInfo {
 pub fn read_processes() -> HashMap<String, ProcessInfo> {
     let mut processes_map: HashMap<String, ProcessInfo> = HashMap::new();
     let system_uptime = get_system_uptime().unwrap();
-    // 1. Listar o diretório /proc
     if let Ok(entries) = fs::read_dir("/proc") {
-        processes_map = read_each_process(system_uptime, entries);
+        let entries_vec: Vec<_> = entries.filter_map(Result::ok).collect();
+        let init_process_map = read_each_process(system_uptime, &entries_vec);
+        std::thread::sleep(time::Duration::from_millis(1000));
+        let end_process_map = read_each_process(system_uptime, &entries_vec);
+
+        end_process_map.iter().for_each(|e| {
+            let pid = e.0;
+            let process_info = e.1;
+            let mut updated_process_info = process_info.clone();
+
+            if init_process_map.contains_key(&pid.to_string()) {
+                let init_cpu_ticks = init_process_map.get(pid).unwrap().cpu_ticks.clone();
+                let end_cpu_ticks = process_info.cpu_ticks.clone();
+                let cpu_usage_last_second = get_cpu_usage_last_second(init_cpu_ticks, end_cpu_ticks);
+                updated_process_info.cpu_usage_avg_last_second_pct = cpu_usage_last_second;
+                processes_map.insert(pid.to_string(), updated_process_info);
+            }
+        })
     }
     processes_map
 }
 
-fn read_each_process(system_uptime: f64, entries: ReadDir) -> HashMap<String, ProcessInfo> {
+fn read_each_process(system_uptime: f64, entries: &Vec<DirEntry>) -> HashMap<String, ProcessInfo> {
     let mut processes_map: HashMap<String, ProcessInfo> = HashMap::new();
 
-    for entry in entries.flatten() {
+    for entry in entries {
         let path = entry.path();
         if path.is_dir() {
             if let Some(pid_str) = path.file_name().and_then(|s| s.to_str()) {

@@ -2,6 +2,7 @@ use std::fs;
 use std::path::Path;
 use std::thread::available_parallelism;
 
+#[derive(Clone)]
 pub struct CpuTicks {
     utime: f64,
     stime: f64,
