@@ -10,7 +10,7 @@ use clap::Parser;
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    #[arg(short, long)]
+    #[arg(short, long, default_value = "5")]
     limit: Option<usize>,
 }
 
@@ -20,7 +20,7 @@ fn main() {
     let mut processes: Vec<ProcessInfo> = processes_map.into_values().collect();
     processes.sort_by_key(|p| std::cmp::Reverse(p.memory_res_kb));
 
-    if args.limit != None {
+    if args.limit != None  && args.limit.unwrap() < processes.len() {
         _ = processes.split_off(args.limit.unwrap());
     }
     pretty_print_table(processes, get_system_memory_kbs().unwrap());
